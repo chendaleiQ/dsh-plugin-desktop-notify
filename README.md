@@ -8,6 +8,8 @@
 
 ![任务在后台跑完弹横幅、点一下回到会话、角标清零](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
 
+*（上图是示意图，不是录屏）*
+
 ## 它做什么
 
 - **任务完成**——包括窗口切到后台、你在别的应用里的时候

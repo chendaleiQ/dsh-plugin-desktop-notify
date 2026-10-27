@@ -8,6 +8,8 @@ Desktop notifications and an app-icon badge for DSH: a finished turn, a pending 
 
 ![A backgrounded turn finishes, the banner appears, one click returns to that session](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
 
+*(Illustration, not a screen recording.)*
+
 ## What it does
 
 - **Turn finished** — including while the window is backgrounded or another app is in front
