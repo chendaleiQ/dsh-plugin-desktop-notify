@@ -108,6 +108,7 @@ function createWorld({ preferences } = {}) {
       },
     },
     document: {
+      documentElement: { lang: "zh-CN" },
       get visibilityState() {
         return visible ? "visible" : "hidden"
       },
@@ -190,6 +191,9 @@ function createWorld({ preferences } = {}) {
       if (nextSummaries !== undefined) summaries = nextSummaries
       publish()
     },
+    setLanguage(lang) {
+      sandbox.document.documentElement.lang = lang
+    },
     setFocus(nextFocused, nextVisible = nextFocused) {
       const wasFocused = focused
       focused = nextFocused
@@ -216,12 +220,13 @@ console.log("client-half harness")
   world.setState(new Map([["s1", { running: false, completionUnread: true }]]))
   check("finished background session posts one banner", world.notifications.length === 1, `got ${world.notifications.length}`)
   check("banner carries the session title", world.notifications[0]?.options?.body?.includes("修桌面通知插件") === true)
-  check("banner title is the completion title", world.notifications[0]?.title === "DSH 任务完成")
+  check("banner title reads like the product", world.notifications[0]?.title === "任务已完成", world.notifications[0]?.title)
   check(
     "banner sets no tag (Windows 11 drops tags longer than ~34 chars)",
     world.notifications[0]?.options?.tag === undefined && world.notifications[0]?.options?.silent === undefined,
     JSON.stringify(world.notifications[0]?.options),
   )
+  check("completion body reports the turn duration", /用时/u.test(world.notifications[0]?.options?.body ?? ""), world.notifications[0]?.options?.body)
   check("Dock badge shows 1 unread", world.latestBadge() === 1, String(world.latestBadge()))
 
   world.setState(new Map([["s1", { running: false, completionUnread: true }]]))
@@ -289,12 +294,12 @@ console.log("client-half harness")
 {
   const world = createWorld()
   world.setState(new Map([["s2", { running: true }]]), user("s2", "部署网关"))
-  world.setState(new Map([["s2", { running: true, pendingInteraction: { kind: "approval" } }]]))
+  world.setState(new Map([["s2", { running: true, pendingInteraction: { kind: "approval", toolName: "Bash" } }]]))
   check("pending approval posts one banner", world.notifications.length === 1, `got ${world.notifications.length}`)
-  check("pending banner uses the approval title", world.notifications[0]?.title === "DSH 需要你确认")
-  check("pending banner says what is waiting", world.notifications[0]?.options?.body?.includes("等你批准") === true)
+  check("pending banner uses the approval title", world.notifications[0]?.title === "等待你的批准", world.notifications[0]?.title)
+  check("pending banner names the tool", world.notifications[0]?.options?.body?.includes("Bash") === true && world.notifications[0]?.options?.body?.includes("等待你的批准") === true, world.notifications[0]?.options?.body)
   check("a waiting approval also badges the Dock", world.latestBadge() === 1, String(world.latestBadge()))
-  world.setState(new Map([["s2", { running: true, pendingInteraction: { kind: "approval" } }]]))
+  world.setState(new Map([["s2", { running: true, pendingInteraction: { kind: "approval", toolName: "Bash" } }]]))
   check("the same approval does not re-notify or re-badge", world.notifications.length === 1 && world.latestBadge() === 1)
   world.setState(new Map([["s2", { running: true }]]))
   check("handled approval clears the badge", world.latestBadge() === 0, String(world.latestBadge()))
@@ -308,7 +313,7 @@ console.log("client-half harness")
 
   world.emitError("s3", "stream error: connection reset")
   check("failure posts one banner", world.notifications.length === 1, `got ${world.notifications.length}`)
-  check("failure banner uses the error title", world.notifications[0]?.title === "DSH 任务出错")
+  check("failure banner uses the error title", world.notifications[0]?.title === "任务执行失败", world.notifications[0]?.title)
   check("failure banner carries the message", world.notifications[0]?.options?.body?.includes("connection reset") === true)
   check("failure badges the Dock", world.latestBadge() === 1, String(world.latestBadge()))
 
@@ -325,7 +330,18 @@ console.log("client-half harness")
   check("watching a session never notifies for it", world.notifications.length === 2, `got ${world.notifications.length}`)
 }
 
-// 7. Preferences: mute banners, keep the badge; mute the badge alone.
+// 7. Copy follows the UI language, not the OS.
+{
+  const world = createWorld()
+  world.setLanguage("en-US")
+  world.setState(new Map([["s1", { running: true }]]), user("s1", "Fix the notifier"))
+  world.setState(new Map([["s1", { running: false }]]))
+  check("english completion title follows <html lang>", world.notifications[0]?.title === "Task completed", world.notifications[0]?.title)
+  check("english body names the session", world.notifications[0]?.options?.body?.includes("Fix the notifier") === true, world.notifications[0]?.options?.body)
+  check("english body reports the duration", /completed in/iu.test(world.notifications[0]?.options?.body ?? ""), world.notifications[0]?.options?.body)
+}
+
+// 8. Preferences: mute banners, keep the badge; mute the badge alone.
 {
   const muted = createWorld({ preferences: { notifications: false } })
   muted.setState(new Map([["s4", { completionUnread: true }]]), user("s4", "静音"))

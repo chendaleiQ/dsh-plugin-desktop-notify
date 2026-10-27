@@ -14,10 +14,10 @@
 
 | Codex 桌面版 | 这里 |
 |---|---|
-| Settings → Notifications → **Task completion** | 「DSH 任务完成」：会话跑完时，你没在看它 |
-| Settings → Notifications → **Approval required** | 「DSH 需要你确认」：有工具等你批准 |
-| 等你回复（提问 / 计划确认） | 「DSH 需要你确认」：有提问等你回答、有计划等你确认 |
-| 任务失败 | 「DSH 任务出错」：正文带错误摘要 |
+| Settings → Notifications → **Task completion** | 标题「任务已完成」，正文「对话名」已完成，用时 3 分 12 秒 |
+| Settings → Notifications → **Approval required** | 标题「等待你的批准」，正文「对话名」请求使用 Bash，等待你的批准 |
+| 等你回复（提问 / 计划确认） | 标题「等待你的回答」/「等待你的确认」，正文带会话名 |
+| 任务失败 | 标题「任务执行失败」，正文带会话名与错误摘要 |
 | Dock 徽标 | 数字 = **当前需要你的会话数**；打开该会话即清 |
 
 规则：
@@ -132,9 +132,10 @@ localStorage.setItem("dsh-plugin-desktop-notify:preferences", JSON.stringify({
   notifyViewed: false,    // true = 盯着看它也弹（但不进红点）
   badge: true,            // 总开关：Dock 红点
   excludeSubagents: true, // 子会话不弹不计（建议保持）
-  titleComplete: "DSH 任务完成",
-  titlePending: "DSH 需要你确认",
-  titleError: "DSH 任务出错",
+  // 留空 = 用内置文案（跟随界面语言 zh/en）
+  titleComplete: "",
+  titlePending: "",
+  titleError: "",
   maxBodyChars: 140
 }))
 // 恢复默认

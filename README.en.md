@@ -16,9 +16,9 @@ Codex-style **macOS notifications and a Dock unread badge** for the
 
 | Event | Banner | Dock badge |
 |---|---|---|
-| A turn finishes while you are not watching it | “DSH 任务完成” + session title | +1 |
-| A tool approval / question / plan review is waiting | “DSH 需要你确认” | +1 |
-| A turn fails | “DSH 任务出错” + error summary | +1 |
+| A turn finishes while you are not watching it | “Task completed” + “「name」Completed in 3m 12s” | +1 |
+| A tool approval / question / plan review is waiting | “Approval needed” / “Your reply is needed” / “Plan review needed” | +1 |
+| A turn fails | “Task failed” + the error summary | +1 |
 | You open (and look at) that session | — | cleared |
 
 Rules:
@@ -126,9 +126,10 @@ localStorage.setItem("dsh-plugin-desktop-notify:preferences", JSON.stringify({
   notifyViewed: false,    // true = also banner the session you are watching
   badge: true,            // Dock badge master switch
   excludeSubagents: true,
-  titleComplete: "DSH 任务完成",
-  titlePending: "DSH 需要你确认",
-  titleError: "DSH 任务出错",
+  // empty = built-in copy, following the UI language (zh/en)
+  titleComplete: "",
+  titlePending: "",
+  titleError: "",
   maxBodyChars: 140
 }))
 ```
