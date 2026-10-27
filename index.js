@@ -121,7 +121,10 @@ function mountInterface(ctx, config) {
       return undefined
     }
   })()
-  if (server === undefined || typeof server.register !== "function") return
+  if (server === undefined || typeof server.register !== "function") {
+    void noteToLog(config.logPath, "interface: the Host has no webServer service; the interface is unavailable")
+    return
+  }
 
   const queue = []
   const disposers = []
@@ -183,7 +186,7 @@ function mountInterface(ctx, config) {
       }
     } }))
   } catch (error) {
-    void Promise.resolve(config.logPath).then((path) => noteToLog(path, `interface: ${String(error)}`))
+    void noteToLog(config.logPath, `interface: cannot register routes: ${String(error)}`)
     return
   }
 
@@ -199,7 +202,10 @@ function mountInterface(ctx, config) {
   if (endpointPath !== "" && origin !== undefined) {
     void mkdir(dirname(endpointPath), { recursive: true })
       .then(() => writeFile(endpointPath, `${origin}${API_REQUEST_PATH}\n`, "utf8"))
-      .catch(() => {})
+      .then(() => noteToLog(config.logPath, `interface: ${origin}${API_REQUEST_PATH}`))
+      .catch((error) => noteToLog(config.logPath, `interface: cannot write the endpoint file: ${String(error)}`))
+  } else {
+    void noteToLog(config.logPath, `interface: routes registered but the address is unknown (origin=${String(origin)})`)
   }
 
   ctx.effect(() => () => {

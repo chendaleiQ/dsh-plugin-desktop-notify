@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-desktop-notify",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "description": "Desktop notifications and a Dock/taskbar badge for DeepSeek Harness: a finished turn, a pending approval or question, and a failure, with click-through back to the session",
   "license": "MIT",
