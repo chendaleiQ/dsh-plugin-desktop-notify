@@ -70,6 +70,24 @@ Read `__DSH_DESKTOP_NOTIFY__.state().lastClick`:
 
 The click path can be exercised directly with `__DSH_DESKTOP_NOTIFY__.openSession("<session id>")`.
 
+### Windows: the click switches the session, but the window may stay behind
+
+Not something a plugin can fix. The click reaches the renderer (since v0.5.2
+`lastClick.opened.ok === true` and the session really switches), but raising the main
+window needs the main process (`BrowserWindow.show()` / `focus()`) or a registered
+AppUserModelID. The renderer only has `webContents.focus()`, and Windows' foreground
+lock ignores requests from non-foreground processes.
+
+Two upstream fixes, either works:
+
+1. Call `app.setAppUserModelId("com.deepseek.dsh")` in the desktop main process and ship a
+   Start Menu shortcut with the same AUMID — Windows then activates the app on toast
+   clicks, so the window comes forward.
+2. Expose a "focus window" IPC channel the renderer can call.
+
+Until then: if the window does not surface, click the taskbar/tray icon — **the session
+is already selected**.
+
 ### Windows: badge appears, no banner
 
 **Fixed in v0.4.4**: older builds passed a long `tag`

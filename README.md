@@ -59,6 +59,21 @@
 
 也可以直接验证切会话这条链路：`__DSH_DESKTOP_NOTIFY__.openSession("<会话 id>")`。
 
+### Windows：点通知切会话成功，但窗口不一定到最前
+
+这不是插件能修的：点击事件已经送到渲染层（v0.5.2 起 `lastClick.opened.ok === true`，会话也确实切了），
+但把**主窗口提到前台**需要主进程的 `BrowserWindow.show()` / `focus()`，或者系统层面的
+AppUserModelID 注册；渲染层只有 `webContents.focus()`，而 Windows 的前台锁定会忽略来自
+非前台进程的请求。
+
+两种上游修法（任一即可）：
+
+1. 桌面端主进程调用 `app.setAppUserModelId("com.deepseek.dsh")`，并让安装包写出带同一 AUMID
+   的开始菜单快捷方式——Windows 就会在点击 toast 时激活应用，窗口自然到前台。
+2. 主进程暴露一个「focus window」的 IPC 通道，让插件请求抬窗。
+
+在此之前：点通知后若窗口没上来，点任务栏/托盘图标即可，**会话已经切好了**。
+
 ### Windows 上「有红点、没横幅」
 
 **v0.4.4 已修**：旧版本给每条通知带了一个很长的 `tag`（`dsh-plugin-desktop-notify:complete:<sessionId>`），
