@@ -70,6 +70,8 @@ function createWorld({ preferences } = {}) {
 
   const sandbox = {
     console,
+    setTimeout,
+    clearTimeout,
     window: {
       __ModuleLoader__: {
         load(definition) {
