@@ -1,0 +1,62 @@
+{
+  "name": "dsh-plugin-desktop-notify",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "Codex-style macOS notifications and Dock badge for DeepSeek Harness: completion (including backgrounded windows), pending approval/question/plan, and failures, with click-through back to the session",
+  "license": "MIT",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-session"
+      ]
+    }
+  },
+  "author": "chendaleiQ",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "macos",
+    "notification",
+    "dock-badge",
+    "unread"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chendaleiQ/dsh-plugin-desktop-notify.git"
+  },
+  "homepage": "https://github.com/chendaleiQ/dsh-plugin-desktop-notify#readme",
+  "bugs": {
+    "url": "https://github.com/chendaleiQ/dsh-plugin-desktop-notify/issues"
+  },
+  "scripts": {
+    "test": "node test/client.test.mjs && node test/host.test.mjs /tmp/dsh-notify-host-test.log"
+  }
+}

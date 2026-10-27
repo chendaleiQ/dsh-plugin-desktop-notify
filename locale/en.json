@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Desktop Notifications & Dock Badge",
+    "description": "Codex-style alerts: a macOS banner for a finished turn, a pending approval or question, and a failure, plus a Dock badge counting the sessions that need you. Click the banner to open that session."
+  }
+}

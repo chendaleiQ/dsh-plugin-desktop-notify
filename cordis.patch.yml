@@ -1,0 +1,36 @@
+# The dsh-plugin-desktop-notify bundle patch.
+#
+# Two halves, one package:
+#
+# - The CLIENT half (lib/client.js, discovered through package.json
+#   `dsh.client`) is where the feature lives: native notifications whose click
+#   opens the finished session, plus the Dock unread badge. It needs no host
+#   cooperation; the row below only keeps the bundle selectable and active.
+# - The HOST half (index.js) is an OPTIONAL osascript fallback for renderers
+#   where `Notification` is unavailable. It is switched off by
+#   `config.enabled: false` (not by `disabled: true`, which would make the
+#   bundle look inactive to the plugin manager). Turning it on while the client
+#   half also runs double-notifies.
+- insert:
+    - id: desktop-notify
+      name: 'dsh-plugin-desktop-notify'
+      config:
+        # Host fallback is off: the renderer half posts the banner.
+        enabled: false
+        onTurnEnd: true
+        onApproval: true
+        # Only notify while another app is in front.
+        onlyWhenUnfocused: true
+        frontmostAppNames:
+          - 'DeepSeek Harness'
+        sound: true
+        soundFile: '/System/Library/Sounds/Glass.aiff'
+        titleTurnEnd: 'DSH 任务完成'
+        titleApproval: 'DSH 需要你确认'
+        notifyOnTurnEndKinds:
+          - completed
+          - error
+          - blocked
+          - max-tokens
+        maxBodyChars: 140
+        logPath: '~/.dsh/desktop-notify.log'
