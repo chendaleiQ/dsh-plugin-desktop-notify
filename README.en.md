@@ -55,6 +55,16 @@ Rules:
 
 ### Windows: badge appears, no banner
 
+**Fixed in v0.4.4**: older builds passed a long `tag`
+(`dsh-plugin-desktop-notify:complete:<sessionId>`), and Windows 11 silently drops web
+notifications whose tag is longer than ~34 characters
+([electron/electron#40433](https://github.com/electron/electron/issues/40433)). The
+plugin no longer sets `tag` / `silent`; dedupe relies on status edges, which is why a
+bare `new Notification("t",{body:"b"})` showed up while the plugin's banner did not.
+
+If it still fails after upgrading, use the checks below:
+
+
 The badge is a taskbar overlay and needs no AppUserModelID. **Windows toasts do need an
 AppUserModelID plus a Start Menu shortcut**, and the DSH main process never calls
 `app.setAppUserModelId` (checked `lib/main.js`), so Windows can drop the toast silently —

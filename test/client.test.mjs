@@ -217,7 +217,11 @@ console.log("client-half harness")
   check("finished background session posts one banner", world.notifications.length === 1, `got ${world.notifications.length}`)
   check("banner carries the session title", world.notifications[0]?.options?.body?.includes("修桌面通知插件") === true)
   check("banner title is the completion title", world.notifications[0]?.title === "DSH 任务完成")
-  check("banner carries a per-session tag", world.notifications[0]?.options?.tag === "dsh-plugin-desktop-notify:complete:s1")
+  check(
+    "banner sets no tag (Windows 11 drops tags longer than ~34 chars)",
+    world.notifications[0]?.options?.tag === undefined && world.notifications[0]?.options?.silent === undefined,
+    JSON.stringify(world.notifications[0]?.options),
+  )
   check("Dock badge shows 1 unread", world.latestBadge() === 1, String(world.latestBadge()))
 
   world.setState(new Map([["s1", { running: false, completionUnread: true }]]))

@@ -50,6 +50,14 @@
 
 ### Windows 上「有红点、没横幅」
 
+**v0.4.4 已修**：旧版本给每条通知带了一个很长的 `tag`（`dsh-plugin-desktop-notify:complete:<sessionId>`），
+而 Windows 11 会**静默丢弃 tag 长度超过约 34 字符的 Web Notification**（[electron/electron#40433](https://github.com/electron/electron/issues/40433)）。
+现在不再设置 `tag` / `silent`，去重改由状态边沿判断完成——所以裸 `new Notification("t",{body:"b"})` 能弹、
+插件的不弹，正是这个原因。
+
+如果升级后仍不弹，再按下面排查：
+
+
 红点走的是任务栏 overlay，不需要 AppUserModelID；**Windows toast 需要 AppUserModelID +
 开始菜单快捷方式**才会显示。DSH 主进程没有调用 `app.setAppUserModelId`（`lib/main.js` 里没有
 这行），所以 toast 很可能被 Windows 静默丢弃——这不是插件逻辑问题。先确认：
