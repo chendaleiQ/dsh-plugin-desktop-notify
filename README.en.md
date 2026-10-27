@@ -62,7 +62,9 @@ Read `__DSH_DESKTOP_NOTIFY__.state().lastClick`:
   ([electron/electron#24524](https://github.com/electron/electron/issues/24524)), and without
   one the click may simply dismiss the toast. A plugin cannot fix that layer.
 - `opened.ok: false` → the click arrived but the session switch failed; `opened.attempts`
-  says why (`uiWorkspace` unreachable, `retain` failed, …).
+  says why (`uiWorkspace` unreachable, `retain` failed, …). Since v0.5.2 the plugin declares
+  `uiWorkspace` as a dependency (the same way the official `ui-chat` plugin does), which is
+  what made the macOS click fail to switch sessions before.
 - `opened.ok: true` but the view did not change → the window was hidden; the click only
   activates the app, so bring it forward from the Dock/taskbar.
 

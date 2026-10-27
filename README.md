@@ -54,6 +54,7 @@
 
 - `null` → 点击事件根本没送到渲染层。macOS 上基本不会；**Windows 上很常见**：Electron 的 WinRT toast 点击激活需要 COM activator 注册（[electron/electron#24524](https://github.com/electron/electron/issues/24524)），没注册时点横幅可能只是把系统通知收起。这一层插件修不了。
 - `opened.ok: false` → 点击到了，但切会话失败，`opened.attempts` 里写着原因（`uiWorkspace` 服务不可达 / `retain` 失败等）。
+  v0.5.2 起插件把 `uiWorkspace` 声明成了依赖（和官方 `ui-chat` 插件一致），此前它在这个插件里是取不到的——这就是 macOS 上「点击只激活应用、不切会话」的原因。
 - `opened.ok: true` 但界面没变 → 窗口被藏起来了（点横幅只激活应用，不一定会显示窗口），手动点 Dock/任务栏图标把窗口调出来即可。
 
 也可以直接验证切会话这条链路：`__DSH_DESKTOP_NOTIFY__.openSession("<会话 id>")`。
