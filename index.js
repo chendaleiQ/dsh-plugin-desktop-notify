@@ -15,9 +15,9 @@
  */
 
 import { execFile, spawn } from "node:child_process"
-import { appendFile, mkdir } from "node:fs/promises"
+import { appendFile, mkdir, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
-import { basename, dirname } from "node:path"
+import { basename, dirname, join } from "node:path"
 
 /** Read the notification in argv order, so no AppleScript string escaping is needed. */
 const APPLESCRIPT = [
@@ -42,6 +42,14 @@ const DEFAULTS = {
   maxTrackedSessions: 64,
   /** Log the decision without spawning osascript/afplay; the tests use it. */
   dryRun: false,
+  /** Local interface other tools post notifications to (see README). */
+  api: true,
+  /** Where the endpoint URL is written for those tools. */
+  endpointPath: "~/.dsh/desktop-notify.endpoint",
+  /** Longest accepted request body. */
+  apiBodyLimit: 8192,
+  /** How many unread requests the interface keeps. */
+  apiQueueLimit: 50,
 }
 
 /** Turn-end bodies for the kinds that carry no model text. */
@@ -50,6 +58,172 @@ const TURN_END_BODIES = {
   aborted: () => "本轮已中止",
   blocked: () => "本轮被拦截",
   "max-tokens": () => "输出达到上限，本轮结束",
+}
+
+/** The URL path tools post to, and the path the renderer drains. */
+const API_REQUEST_PATH = "/desktop-notify/request"
+const API_PENDING_PATH = "/desktop-notify/pending"
+
+/** Read one JSON request body, bounded by `limit` bytes. */
+function readBody(request, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let size = 0
+    request.on("data", (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        reject(new Error("body too large"))
+        request.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")))
+      } catch (error) {
+        reject(error)
+      }
+    })
+    request.on("error", reject)
+  })
+}
+
+/** Write one JSON answer with the headers a local tool needs. */
+function answer(response, status, payload) {
+  const body = JSON.stringify(payload)
+  response.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+    "cache-control": "no-store",
+    "access-control-allow-origin": "*",
+    "access-control-allow-headers": "content-type",
+  })
+  response.end(body)
+}
+
+/**
+ * Mount the local notification interface other tools (a watch script, a
+ * browser agent, a cron job) post to.
+ *
+ * The interface is two loopback HTTP routes on the Host's own web server: POST
+ * a request, and the renderer drains the queue over the app protocol. The
+ * renderer shows the banner, so it is attributed to DeepSeek Harness rather
+ * than to a script host. Nothing here needs authentication: the server binds
+ * loopback, and the endpoint URL is written to a file the caller can read.
+ */
+function mountInterface(ctx, config) {
+  if (!config.api) return
+  const server = (() => {
+    try {
+      return ctx.get?.("webServer")
+    } catch {
+      return undefined
+    }
+  })()
+  if (server === undefined || typeof server.register !== "function") return
+
+  const queue = []
+  const disposers = []
+
+  const post = async (request, response) => {
+    if (request.method === "OPTIONS") {
+      answer(response, 204, {})
+      return
+    }
+    if (request.method !== "POST") {
+      answer(response, 405, { ok: false, error: "use POST" })
+      return
+    }
+    let payload
+    try {
+      payload = await readBody(request, Math.max(1024, config.apiBodyLimit))
+    } catch (error) {
+      answer(response, 400, { ok: false, error: String(error?.message ?? error) })
+      return
+    }
+    const title = typeof payload?.title === "string" ? payload.title.trim() : ""
+    const body = typeof payload?.body === "string" ? payload.body.trim() : ""
+    if (title === "" && body === "") {
+      answer(response, 400, { ok: false, error: "title or body is required" })
+      return
+    }
+    queue.push({
+      at: new Date().toISOString(),
+      title: title === "" ? "DeepSeek Harness" : title,
+      body: body.slice(0, 400),
+      ...typeof payload?.sessionId === "string" && payload.sessionId !== "" ? { sessionId: payload.sessionId } : {},
+    })
+    while (queue.length > Math.max(1, config.apiQueueLimit)) queue.shift()
+    answer(response, 202, { ok: true, queued: queue.length })
+  }
+
+  const pending = (request, response) => {
+    if (request.method === "OPTIONS") {
+      answer(response, 204, {})
+      return
+    }
+    if (request.method !== "GET") {
+      answer(response, 405, { ok: false, error: "use GET" })
+      return
+    }
+    const items = queue.splice(0, queue.length)
+    answer(response, 200, items)
+  }
+
+  try {
+    disposers.push(server.register({ kind: "exact", path: API_REQUEST_PATH, handler: (request, response) => {
+      void post(request, response).catch(() => answer(response, 500, { ok: false }))
+    } }))
+    disposers.push(server.register({ kind: "exact", path: API_PENDING_PATH, handler: (request, response) => {
+      try {
+        pending(request, response)
+      } catch {
+        answer(response, 500, [])
+      }
+    } }))
+  } catch (error) {
+    void Promise.resolve(config.logPath).then((path) => noteToLog(path, `interface: ${String(error)}`))
+    return
+  }
+
+  // Hand the caller an address to post to; the port is whatever the Host took.
+  const endpointPath = expandHome(config.endpointPath)
+  const origin = (() => {
+    try {
+      return typeof server.getOrigin === "function" ? server.getOrigin() : undefined
+    } catch {
+      return undefined
+    }
+  })() ?? (typeof server.port === "number" ? `http://127.0.0.1:${server.port}` : undefined)
+  if (endpointPath !== "" && origin !== undefined) {
+    void mkdir(dirname(endpointPath), { recursive: true })
+      .then(() => writeFile(endpointPath, `${origin}${API_REQUEST_PATH}\n`, "utf8"))
+      .catch(() => {})
+  }
+
+  ctx.effect(() => () => {
+    for (const dispose of disposers) {
+      try {
+        dispose()
+      } catch {
+        /* the route table is being torn down anyway */
+      }
+    }
+    if (endpointPath !== "") void rm(endpointPath, { force: true }).catch(() => {})
+  }, "desktop-notify: local interface")
+}
+
+/** Append one best-effort line to the log from outside the session machinery. */
+async function noteToLog(logPathConfig, line) {
+  try {
+    const path = expandHome(logPathConfig)
+    if (path === "") return
+    await mkdir(dirname(path), { recursive: true })
+    await appendFile(path, `${new Date().toISOString()} ${line}\n`, "utf8")
+  } catch {
+    /* logging is best effort */
+  }
 }
 
 /** Merge the row's config over the defaults, keeping field types honest. */
@@ -142,6 +316,7 @@ function runDetached(command, args) {
  */
 export function apply(ctx, rawConfig) {
   const config = resolveConfig(rawConfig)
+  mountInterface(ctx, config)
   if (!config.enabled) return
 
   const logPath = expandHome(config.logPath)

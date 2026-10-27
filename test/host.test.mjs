@@ -1,3 +1,5 @@
+import assert from "node:assert/strict"
+import { EventEmitter } from "node:events"
 import { readFileSync } from "node:fs"
 
 const log = process.argv[2] ?? "/tmp/dsh-notify-test.log"
@@ -49,3 +51,76 @@ await sleep(900)
 emit("session/disposed", main)
 
 console.log(readFileSync(log, "utf8"))
+
+
+// ---- local notification interface -------------------------------------------
+const routes = new Map()
+const endpointFile = `/tmp/dsh-notify-endpoint-${process.pid}`
+const webServer = {
+  register(route) {
+    routes.set(route.path, route)
+    return () => routes.delete(route.path)
+  },
+  getOrigin() {
+    return "http://127.0.0.1:4567"
+  },
+}
+const apiCtx = {
+  on() {
+    return () => {}
+  },
+  get(name) {
+    return name === "webServer" ? webServer : undefined
+  },
+  effect(factory) {
+    const dispose = factory()
+    return () => dispose?.()
+  },
+}
+
+apply(apiCtx, { enabled: false, api: true, endpointPath: endpointFile, logPath: "/tmp/dsh-notify-api.log", dryRun: true })
+await sleep(50)
+assert.equal(routes.has("/desktop-notify/request"), true, "the POST route is registered")
+assert.equal(routes.has("/desktop-notify/pending"), true, "the drain route is registered")
+assert.equal(readFileSync(endpointFile, "utf8").trim(), "http://127.0.0.1:4567/desktop-notify/request")
+
+function call(path, method, payload) {
+  const req = Object.assign(new EventEmitter(), { method })
+  const res = {
+    status: 0,
+    body: "",
+    writeHead(code) {
+      this.status = code
+    },
+    end(body) {
+      this.body = body
+    },
+  }
+  routes.get(path).handler(req, res)
+  if (payload !== undefined) {
+    queueMicrotask(() => {
+      req.emit("data", Buffer.from(JSON.stringify(payload)))
+      req.emit("end")
+    })
+  }
+  return res
+}
+
+const accepted = call("/desktop-notify/request", "POST", { title: "neo 需要你", body: "有一个接管请求" })
+await sleep(80)
+assert.equal(accepted.status, 202, "a valid request is accepted")
+
+const drained = call("/desktop-notify/pending", "GET")
+const items = JSON.parse(drained.body)
+assert.equal(items.length, 1)
+assert.equal(items[0].title, "neo 需要你")
+assert.equal(items[0].body, "有一个接管请求")
+
+const empty = call("/desktop-notify/pending", "GET")
+assert.deepEqual(JSON.parse(empty.body), [], "draining empties the queue")
+
+const rejected = call("/desktop-notify/request", "POST", { body: "" })
+await sleep(80)
+assert.equal(rejected.status, 400, "an empty request is refused")
+
+console.log("host interface: ok")

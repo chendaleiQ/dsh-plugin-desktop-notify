@@ -70,6 +70,8 @@ function createWorld({ preferences } = {}) {
 
   const sandbox = {
     console,
+    setInterval,
+    clearInterval,
     setTimeout,
     clearTimeout,
     window: {

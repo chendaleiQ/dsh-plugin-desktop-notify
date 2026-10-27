@@ -55,6 +55,48 @@ __DSH_DESKTOP_NOTIFY__.state()
 __DSH_DESKTOP_NOTIFY__.report()
 ```
 
+
+## Notification interface for other tools
+
+The Host half exposes two loopback routes for scripts, browser agents and cron
+jobs:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/desktop-notify/request` | Post one notification: `{"title": "...", "body": "...", "sessionId": "optional"}` |
+| `GET` | `/desktop-notify/pending` | The renderer drains what is waiting (scripts do not call it) |
+
+The address is written to `~/.dsh/desktop-notify.endpoint`, so callers never guess
+the port:
+
+```bash
+curl -s "$(cat ~/.dsh/desktop-notify.endpoint)" \
+  -H 'content-type: application/json' \
+  -d '{"title":"BrowserOS needs you","body":"A takeover request is waiting"}'
+```
+
+Python:
+
+```python
+import json, pathlib, urllib.request
+
+url = pathlib.Path.home().joinpath(".dsh/desktop-notify.endpoint").read_text().strip()
+request = urllib.request.Request(
+    url,
+    data=json.dumps({"title": "BrowserOS needs you", "body": "A takeover request is waiting"}).encode(),
+    headers={"content-type": "application/json"},
+)
+urllib.request.urlopen(request, timeout=3).read()
+```
+
+Notes:
+
+- The banner is posted by **DSH itself** (attributed to DeepSeek Harness), not by
+  a script host
+- Clicking it raises the window; with `sessionId` it also switches to that session
+- The interface binds loopback only and needs no login; `enabled: false` switches
+  off the osascript fallback, not the interface
+
 ## Known limits
 
 - **Windows**: clicking a notification switches the session, but the window does

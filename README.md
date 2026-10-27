@@ -53,6 +53,44 @@ __DSH_DESKTOP_NOTIFY__.state()          // 小红点、待处理会话、最近�
 __DSH_DESKTOP_NOTIFY__.report()         // 上面全部 + 窗口焦点，便于排查
 ```
 
+
+## 给其它工具用的通知接口
+
+宿主半边在**回环地址**上开了两个路由，供脚本、浏览器代理、定时任务调用：
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| `POST` | `/desktop-notify/request` | 发一条通知，body：`{"title": "...", "body": "...", "sessionId": "可选"}` |
+| `GET` | `/desktop-notify/pending` | 渲染层取走待显示的通知（脚本不用调） |
+
+地址写在 `~/.dsh/desktop-notify.endpoint`，所以调用方不用猜端口：
+
+```bash
+curl -s "$(cat ~/.dsh/desktop-notify.endpoint)" \
+  -H 'content-type: application/json' \
+  -d '{"title":"BrowserOS 需要你","body":"有一个接管请求"}'
+```
+
+Python（比如监听 neo 的守护脚本）：
+
+```python
+import json, pathlib, urllib.request
+
+url = pathlib.Path.home().joinpath(".dsh/desktop-notify.endpoint").read_text().strip()
+request = urllib.request.Request(
+    url,
+    data=json.dumps({"title": "BrowserOS 需要你", "body": "有一个接管请求"}).encode(),
+    headers={"content-type": "application/json"},
+)
+urllib.request.urlopen(request, timeout=3).read()
+```
+
+要点：
+
+- 通知由 **DSH 自己弹出**（归属 DeepSeek Harness），不是 Script Editor
+- 点通知会把窗口叫到前面；带 `sessionId` 时会切到那个会话
+- 接口只监听回环地址，不需要登录；`enabled: false` 只关 osascript 兜底，不影响接口
+
 ## 已知限制
 
 - **Windows**：点通知会切到对应会话，但窗口不一定到前台——`AppUserModelID` 和主进程 focus 通道属于桌面端，渲染层插件做不到
