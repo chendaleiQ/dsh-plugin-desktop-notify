@@ -2,6 +2,12 @@
 
 Desktop notifications and an app-icon badge for DSH: a finished turn, a pending approval or question, and a failure, with click-through back to that session.
 
+[![npm](https://img.shields.io/npm/v/dsh-plugin-desktop-notify)](https://www.npmjs.com/package/dsh-plugin-desktop-notify)
+[![license](https://img.shields.io/npm/l/dsh-plugin-desktop-notify)](LICENSE)
+[![DeepSeek Harness plugin](https://img.shields.io/badge/DSH-plugin-4D6BFE)](https://github.com/chendaleiQ/dsh-plugin-desktop-notify)
+
+![A backgrounded turn finishes, the banner appears, one click returns to that session](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
+
 ## What it does
 
 - **Turn finished** — including while the window is backgrounded or another app is in front

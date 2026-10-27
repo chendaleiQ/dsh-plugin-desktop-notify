@@ -2,6 +2,12 @@
 
 给 DSH 加**桌面通知 + 应用图标小红点**：任务完成、等待你操作、任务失败时提醒你，点通知直接回到那个会话。
 
+[![npm](https://img.shields.io/npm/v/dsh-plugin-desktop-notify)](https://www.npmjs.com/package/dsh-plugin-desktop-notify)
+[![license](https://img.shields.io/npm/l/dsh-plugin-desktop-notify)](LICENSE)
+[![DeepSeek Harness plugin](https://img.shields.io/badge/DSH-plugin-4D6BFE)](https://github.com/chendaleiQ/dsh-plugin-desktop-notify)
+
+![任务在后台跑完弹横幅、点一下回到会话、角标清零](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
+
 ## 它做什么
 
 - **任务完成**——包括窗口切到后台、你在别的应用里的时候
