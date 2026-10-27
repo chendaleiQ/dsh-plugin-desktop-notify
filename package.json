@@ -1,8 +1,8 @@
 {
   "name": "dsh-plugin-desktop-notify",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "type": "module",
-  "description": "Codex-style macOS notifications and Dock badge for DeepSeek Harness: completion (including backgrounded windows), pending approval/question/plan, and failures, with click-through back to the session",
+  "description": "Desktop notifications and a Dock/taskbar badge for DeepSeek Harness: a finished turn, a pending approval or question, and a failure, with click-through back to the session",
   "license": "MIT",
   "main": "index.js",
   "exports": {
