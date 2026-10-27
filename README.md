@@ -98,17 +98,29 @@ __DSH_DESKTOP_NOTIFY__.state().lastNotify                   // 插件最后一�
 
 ## 安装
 
-### 方式一：从 GitHub 安装（推荐）
+### 方式一：npm（推荐）
 
-DSH 桌面版左侧栏 **插件** → **安装**，填仓库地址：
+DSH 桌面版左侧栏 **插件** → **安装**，填包名：
+
+```
+dsh-plugin-desktop-notify
+```
+
+装完按 **⌘R** 刷新窗口（渲染层要重新加载）。提示 `restart-required` 就重启一次应用。
+更新：插件页里卸载再装一次即为最新版。
+
+> 国内网络可以给 npm 配镜像（`npm config set registry https://registry.npmmirror.com`），
+> 或者直接用下面的 GitHub / 本地方式。
+
+### 方式二：从 GitHub 安装
+
+插件页 → 安装 → 填仓库地址：
 
 ```
 https://github.com/chendaleiQ/dsh-plugin-desktop-notify
 ```
 
-装完按 **⌘R** 刷新窗口（渲染层要重新加载）。提示 `restart-required` 就重启一次应用。
-
-### 方式二：本地目录
+### 方式三：本地目录
 
 ```bash
 git clone https://github.com/chendaleiQ/dsh-plugin-desktop-notify.git
@@ -120,7 +132,7 @@ git clone https://github.com/chendaleiQ/dsh-plugin-desktop-notify.git
 /path/to/dsh-plugin-desktop-notify
 ```
 
-### 方式三：开发调试（直接 link 进 profile）
+### 方式四：开发调试（直接 link 进 profile）
 
 ```bash
 git clone https://github.com/chendaleiQ/dsh-plugin-desktop-notify.git

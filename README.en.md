@@ -116,16 +116,18 @@ attributed to Windows PowerShell and without click-through).
 
 ## Install
 
-Inside the DSH desktop app: **Plugins → Install**, then paste the repository address:
+Inside the DSH desktop app: **Plugins → Install**, then paste the package name:
 
 ```
-https://github.com/chendaleiQ/dsh-plugin-desktop-notify
+dsh-plugin-desktop-notify
 ```
 
 Press **⌘R** afterwards so the renderer reloads the bundle (restart the app if it
-says `restart-required`).
+says `restart-required`). To update, uninstall and install it again.
 
-A local checkout works too: clone it and point the install dialog at the **directory**.
+Without access to npmjs.com (or offline), the repository address
+(`https://github.com/chendaleiQ/dsh-plugin-desktop-notify`) and a local checkout
+directory both work the same way.
 For development, symlink it into the profile:
 
 ```bash
