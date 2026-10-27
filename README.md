@@ -48,6 +48,20 @@
 - 想验证 Windows：跑一次 `capabilities()`（会带上 `platform`），再 `simulateComplete()`，
   看 toast 与任务栏数字是否出现，把结果开个 issue 就行。
 
+### Windows 上「有红点、没横幅」
+
+红点走的是任务栏 overlay，不需要 AppUserModelID；**Windows toast 需要 AppUserModelID +
+开始菜单快捷方式**才会显示。DSH 主进程没有调用 `app.setAppUserModelId`（`lib/main.js` 里没有
+这行），所以 toast 很可能被 Windows 静默丢弃——这不是插件逻辑问题。先确认：
+
+```js
+new Notification("test", { body: "windows toast check" })  // 连这条都不弹 = 应用层问题
+__DSH_DESKTOP_NOTIFY__.state().lastNotify                   // 插件最后一次投递的结果
+```
+
+两条路：等 DSH 主进程补上 `app.setAppUserModelId`（那时现有代码就能正常出 toast 并支持点击）；
+或改用宿主侧 PowerShell toast 兜底（能提示，但归属会显示成 Windows PowerShell，点击无法跳回会话）。
+
 ## 安装
 
 ### 方式一：从 GitHub 安装（推荐）

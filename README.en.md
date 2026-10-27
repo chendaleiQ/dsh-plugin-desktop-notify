@@ -53,6 +53,22 @@ Rules:
 - To check a platform: run `capabilities()` (it reports `platform`) and then
   `simulateComplete()`, and open an issue with the result.
 
+### Windows: badge appears, no banner
+
+The badge is a taskbar overlay and needs no AppUserModelID. **Windows toasts do need an
+AppUserModelID plus a Start Menu shortcut**, and the DSH main process never calls
+`app.setAppUserModelId` (checked `lib/main.js`), so Windows can drop the toast silently —
+it is not the plugin's logic. Confirm with:
+
+```js
+new Notification("test", { body: "windows toast check" })  // nothing here means app-level
+__DSH_DESKTOP_NOTIFY__.state().lastNotify                   // the last delivery attempt
+```
+
+Two ways out: DSH sets `app.setAppUserModelId` upstream (then the current code shows toasts
+with click-through), or the host half falls back to a PowerShell toast (visible, but
+attributed to Windows PowerShell and without click-through).
+
 ## Install
 
 Inside the DSH desktop app: **Plugins → Install**, then paste the repository address:
