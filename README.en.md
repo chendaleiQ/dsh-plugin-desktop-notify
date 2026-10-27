@@ -53,6 +53,21 @@ Rules:
 - To check a platform: run `capabilities()` (it reports `platform`) and then
   `simulateComplete()`, and open an issue with the result.
 
+### Banner click does nothing?
+
+Read `__DSH_DESKTOP_NOTIFY__.state().lastClick`:
+
+- `null` → the click never reached the renderer. Rare on macOS, **common on Windows**:
+  WinRT toast activation needs a registered COM activator
+  ([electron/electron#24524](https://github.com/electron/electron/issues/24524)), and without
+  one the click may simply dismiss the toast. A plugin cannot fix that layer.
+- `opened.ok: false` → the click arrived but the session switch failed; `opened.attempts`
+  says why (`uiWorkspace` unreachable, `retain` failed, …).
+- `opened.ok: true` but the view did not change → the window was hidden; the click only
+  activates the app, so bring it forward from the Dock/taskbar.
+
+The click path can be exercised directly with `__DSH_DESKTOP_NOTIFY__.openSession("<session id>")`.
+
 ### Windows: badge appears, no banner
 
 **Fixed in v0.4.4**: older builds passed a long `tag`
@@ -110,6 +125,8 @@ __DSH_DESKTOP_NOTIFY__.capabilities()       // {notification:"granted", badge:tr
 __DSH_DESKTOP_NOTIFY__.state()              // live attention + badge number
 __DSH_DESKTOP_NOTIFY__.simulateComplete()   // fire a banner and set the badge to 1
 __DSH_DESKTOP_NOTIFY__.reset()              // undo the simulation
+__DSH_DESKTOP_NOTIFY__.state().lastClick    // what the last banner click did
+__DSH_DESKTOP_NOTIFY__.openSession("<session id>")  // run the click path manually
 ```
 
 ## Preferences

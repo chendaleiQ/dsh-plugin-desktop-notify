@@ -48,6 +48,16 @@
 - 想验证 Windows：跑一次 `capabilities()`（会带上 `platform`），再 `simulateComplete()`，
   看 toast 与任务栏数字是否出现，把结果开个 issue 就行。
 
+### 点击通知没反应？
+
+先看 `__DSH_DESKTOP_NOTIFY__.state().lastClick`：
+
+- `null` → 点击事件根本没送到渲染层。macOS 上基本不会；**Windows 上很常见**：Electron 的 WinRT toast 点击激活需要 COM activator 注册（[electron/electron#24524](https://github.com/electron/electron/issues/24524)），没注册时点横幅可能只是把系统通知收起。这一层插件修不了。
+- `opened.ok: false` → 点击到了，但切会话失败，`opened.attempts` 里写着原因（`uiWorkspace` 服务不可达 / `retain` 失败等）。
+- `opened.ok: true` 但界面没变 → 窗口被藏起来了（点横幅只激活应用，不一定会显示窗口），手动点 Dock/任务栏图标把窗口调出来即可。
+
+也可以直接验证切会话这条链路：`__DSH_DESKTOP_NOTIFY__.openSession("<会话 id>")`。
+
 ### Windows 上「有红点、没横幅」
 
 **v0.4.4 已修**：旧版本给每条通知带了一个很长的 `tag`（`dsh-plugin-desktop-notify:complete:<sessionId>`），
@@ -114,6 +124,8 @@ __DSH_DESKTOP_NOTIFY__.capabilities()       // {notification:"granted", badge:tr
 __DSH_DESKTOP_NOTIFY__.state()              // 当前 attention 与徽标数字
 __DSH_DESKTOP_NOTIFY__.simulateComplete()   // 立刻弹一条横幅并把 Dock 置 1
 __DSH_DESKTOP_NOTIFY__.reset()              // 清掉自检状态
+__DSH_DESKTOP_NOTIFY__.state().lastClick    // 上一次点横幅发生了什么
+__DSH_DESKTOP_NOTIFY__.openSession("<会话 id>")  // 直接按点击逻辑切会话，验证服务可达
 ```
 
 手工验收：让一个会话跑十几秒，**切到别的 App**（失焦即可，不必切会话），跑完应看到横幅 + Dock `1`；

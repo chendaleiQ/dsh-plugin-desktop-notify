@@ -202,6 +202,7 @@ function createWorld({ preferences } = {}) {
       fire(documentListeners, ["visibilitychange"])
     },
     latestBadge: () => badgeWrites.at(-1),
+    diagnostics: () => sandbox.window.__DSH_DESKTOP_NOTIFY__,
   }
 }
 
@@ -233,7 +234,9 @@ console.log("client-half harness")
   check("an unchanged status does not re-notify", world.notifications.length === 1)
 
   world.notifications[0].onclick()
+  const clickTrace = world.diagnostics()?.state?.().lastClick
   check("click opens the finished session", world.opened[0] === "s1", JSON.stringify(world.opened))
+  check("click trace records a successful open", clickTrace?.opened?.ok === true, JSON.stringify(clickTrace))
   check("click raises the window", world.focusCalls() === 1)
   check("click closes the banner", world.notifications[0].closed === true)
 
