@@ -34,11 +34,19 @@
 
 ## 兼容性
 
-- 实测环境：**DSH Desktop 0.2.1-rc.3**（Electron **44.7.0**）、macOS。
+- **已在 macOS 实测**：DSH Desktop 0.2.1-rc.3（Electron 44.7.0）。
 - 需要桌面端把 `dsh-app://` 注册为 secure context（现版本就是这么做的），否则渲染层拿不到
   `navigator.setAppBadge` 与 `Notification`；`capabilities()` 自检里会显示 `badge: false`。
 - 系统设置 → 通知 → **DeepSeek Harness** 必须是允许状态，否则只有红点没有横幅。
-- Windows / Linux 未适配（徽标与通知机制完全不同）。
+- **Windows / Linux：未实测，但理论上可用**。渲染层用的是标准 Web API：
+  Electron 从 29 起支持 Windows 上的 Badging API（任务栏 overlay，修过 [Windows 下徽标文字不显示](https://releases.electronjs.org/release/v29.1.5)），
+  `Notification` 走 Windows toast。真正的风险在 Windows 的 toast 需要 AppUserModelID +
+  开始菜单快捷方式，而 DSH 主进程没有显式 `setAppUserModelId`（我查过 `lib/main.js`），
+  所以能不能出横幅取决于安装包写的快捷方式。
+- **唯一确定只在 macOS 的是宿主兜底那半边**（`osascript` / `afplay` / `lsappinfo`），
+  它默认关闭，只在你没有 `Notification` 时才需要。
+- 想验证 Windows：跑一次 `capabilities()`（会带上 `platform`），再 `simulateComplete()`，
+  看 toast 与任务栏数字是否出现，把结果开个 issue 就行。
 
 ## 安装
 
@@ -154,7 +162,7 @@ npm test                                      # 两个都跑
 
 ## 已知限制
 
-- 仅 macOS。
+- macOS 已实测；Windows / Linux 未实测（见上面「兼容性」）。
 - 「卡住」目前覆盖**等待审批 / 提问 / 计划确认 / 失败**；没有做「还在 running 但长时间无输出」
   的超时判定（需要宿主侧定时器）。
 - `completionUnread` 与失败事实在宿主内存里，重启应用从零开始（官方语义）。

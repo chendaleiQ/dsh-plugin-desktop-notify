@@ -41,7 +41,17 @@ Rules:
   (`capabilities()` in DevTools reports `badge: false`).
 - System Settings → Notifications → **DeepSeek Harness** must be allowed, otherwise
   you get the badge without banners.
-- Windows / Linux: not implemented.
+- **Windows / Linux: untested, but expected to work.** Both surfaces are plain web
+  APIs: Electron has supported the Badging API on Windows since v29 (taskbar overlay,
+  see [the v29.1.5 Windows badge fix](https://releases.electronjs.org/release/v29.1.5)),
+  and `Notification` maps to Windows toasts. The real caveat is that Windows toasts
+  need an AppUserModelID plus a Start Menu shortcut, and the DSH main process never
+  calls `app.setAppUserModelId`, so whether banners appear depends on the shortcut
+  the installer writes.
+- The only genuinely macOS-only code is the **optional host fallback**
+  (`osascript` / `afplay` / `lsappinfo`), disabled by default.
+- To check a platform: run `capabilities()` (it reports `platform`) and then
+  `simulateComplete()`, and open an issue with the result.
 
 ## Install
 
@@ -126,7 +136,7 @@ npm test
 
 ## Limitations
 
-- macOS only.
+- macOS is verified; Windows / Linux are untested (see Requirements).
 - “Stuck” covers waiting-for-approval / question / plan review / failure; a
   “still running but silent for N minutes” watchdog would need a host timer.
 - Badge facts live in host memory and reset when the app restarts (harness semantics).
