@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/npm/l/dsh-plugin-desktop-notify)](LICENSE)
 [![DeepSeek Harness plugin](https://img.shields.io/badge/DSH-plugin-4D6BFE)](https://github.com/chendaleiQ/dsh-plugin-desktop-notify)
 
-![任务在后台跑完弹横幅、点一下回到会话、角标清零](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
+![任务跑完时右上角弹出的通知横幅（真实录屏）](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
 
 *（真实录屏，只截取了通知区域）*
 

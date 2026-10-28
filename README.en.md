@@ -6,7 +6,7 @@ Desktop notifications and an app-icon badge for DSH: a finished turn, a pending 
 [![license](https://img.shields.io/npm/l/dsh-plugin-desktop-notify)](LICENSE)
 [![DeepSeek Harness plugin](https://img.shields.io/badge/DSH-plugin-4D6BFE)](https://github.com/chendaleiQ/dsh-plugin-desktop-notify)
 
-![A backgrounded turn finishes, the banner appears, one click returns to that session](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
+![The notification banner that appears when a turn finishes (real screen recording)](https://raw.githubusercontent.com/chendaleiQ/dsh-plugin-desktop-notify/main/assets/demo.gif)
 
 *(A real screen recording, cropped to the notification area.)*
 
