@@ -15,6 +15,7 @@
 - **任务完成**——包括窗口切到后台、你在别的应用里的时候
 - **等待你操作**——工具审批、提问、执行计划确认
 - **任务失败**——这一轮出错时提示
+- **说清楚怎么结束的**——正常完成、被拦截、输出到上限、被中止，各自一句话，不把中断说成「已完成」
 - **小红点**——应用图标上显示「需要你的会话数」，你看过之后才清零
 - **点击通知**——切到对应会话，而不是只把应用叫到前面
 
@@ -70,6 +71,7 @@ __DSH_DESKTOP_NOTIFY__.report()         // 上面全部 + 窗口焦点，便于�
 | --- | --- | --- |
 | `POST` | `/desktop-notify/request` | 发一条通知，body：`{"title": "...", "body": "...", "sessionId": "可选"}` |
 | `GET` | `/desktop-notify/pending` | 渲染层取走待显示的通知（脚本不用调） |
+| `GET` | `/desktop-notify/turn?sessionId=...` | 渲染层确认这一轮是怎么结束的（脚本不用调） |
 
 地址写在 `~/.dsh/desktop-notify.endpoint`，所以调用方不用猜端口：
 
@@ -97,9 +99,14 @@ urllib.request.urlopen(request, timeout=3).read()
 
 - 通知由 **DSH 自己弹出**（归属 DeepSeek Harness），不是 Script Editor
 - 点通知会把窗口叫到前面；带 `sessionId` 时会切到那个会话
-- 接口只监听回环地址，不需要登录；`enabled: false` 只关 osascript 兜底，不影响接口
+- 接口只监听回环地址；地址里带一个随机 token，**照抄文件里的整条 URL** 就行。
+  没有 token 的请求、以及其它网页发起的跨站请求都会被拒绝
+- 渲染层那条 `/pending` 走的是 DSH 自己的登录态，不需要 token
+- 窗口刷新或重开**不会**补发历史未读的横幅，但小红点还在；`enabled: false` 只关 osascript 兜底，不影响接口
 
 ## 已知限制
+
+- 重启或刷新窗口时，已经存在的「未读 / 待审批」只恢复小红点，不再补弹横幅
 
 - **Windows**：点通知会切到对应会话，但窗口不一定到前台——`AppUserModelID` 和主进程 focus 通道属于桌面端，渲染层插件做不到
 - **通知归属**：系统通知中心里显示为 DeepSeek Harness（用的是渲染层原生通知）

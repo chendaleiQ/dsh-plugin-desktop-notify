@@ -29,6 +29,7 @@
         titleApproval: 'DSH 需要你确认'
         notifyOnTurnEndKinds:
           - completed
+          - aborted
           - error
           - blocked
           - max-tokens

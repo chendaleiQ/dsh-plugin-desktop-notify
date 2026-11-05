@@ -72,6 +72,7 @@ jobs:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `POST` | `/desktop-notify/request` | Post one notification: `{"title": "...", "body": "...", "sessionId": "optional"}` |
+| `GET` | `/desktop-notify/turn?sessionId=...` | the renderer asks how the last turn ended (callers do not need it) |
 | `GET` | `/desktop-notify/pending` | The renderer drains what is waiting (scripts do not call it) |
 
 The address is written to `~/.dsh/desktop-notify.endpoint`, so callers never guess
@@ -102,7 +103,12 @@ Notes:
 - The banner is posted by **DSH itself** (attributed to DeepSeek Harness), not by
   a script host
 - Clicking it raises the window; with `sessionId` it also switches to that session
-- The interface binds loopback only and needs no login; `enabled: false` switches
+- The endpoint URL carries a random token; post to the whole URL as printed, and
+  requests without it (or cross-site ones) are refused. The renderer's `/pending`
+  uses the Host's own login instead
+- Reopening or reloading the window restores the badge but does not re-post
+  banners for facts that were already there
+- The interface binds loopback only; `enabled: false` switches
   off the osascript fallback, not the interface
 
 ## Known limits

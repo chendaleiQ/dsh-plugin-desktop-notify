@@ -15,6 +15,7 @@
  */
 
 import { execFile, spawn } from "node:child_process"
+import { randomBytes } from "node:crypto"
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, dirname, join } from "node:path"
@@ -36,7 +37,7 @@ const DEFAULTS = {
   soundFile: "/System/Library/Sounds/Glass.aiff",
   titleTurnEnd: "DSH 任务完成",
   titleApproval: "DSH 需要你确认",
-  notifyOnTurnEndKinds: ["completed", "error", "blocked", "max-tokens"],
+  notifyOnTurnEndKinds: ["completed", "aborted", "error", "blocked", "max-tokens"],
   maxBodyChars: 140,
   logPath: "~/.dsh/desktop-notify.log",
   maxTrackedSessions: 64,
@@ -60,9 +61,10 @@ const TURN_END_BODIES = {
   "max-tokens": () => "输出达到上限，本轮结束",
 }
 
-/** The URL path tools post to, and the path the renderer drains. */
+/** The URL path tools post to, and the paths the renderer drains and asks. */
 const API_REQUEST_PATH = "/desktop-notify/request"
 const API_PENDING_PATH = "/desktop-notify/pending"
+const API_TURN_PATH = "/desktop-notify/turn"
 
 /** Read one JSON request body, bounded by `limit` bytes. */
 function readBody(request, limit) {
@@ -96,8 +98,6 @@ function answer(response, status, payload) {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
-    "access-control-allow-origin": "*",
-    "access-control-allow-headers": "content-type",
   })
   response.end(body)
 }
@@ -106,118 +106,202 @@ function answer(response, status, payload) {
  * Mount the local notification interface other tools (a watch script, a
  * browser agent, a cron job) post to.
  *
- * The interface is two loopback HTTP routes on the Host's own web server: POST
- * a request, and the renderer drains the queue over the app protocol. The
- * renderer shows the banner, so it is attributed to DeepSeek Harness rather
- * than to a script host. Nothing here needs authentication: the server binds
- * loopback, and the endpoint URL is written to a file the caller can read.
+ * Three routes on the Host's own web server: POST a request, the renderer
+ * drains the queue over the app protocol, and the renderer asks how the turn
+ * that just ended actually ended so it can word the banner. `ctx.inject` waits
+ * for the `webServer` service instead of reading it once: the server finishes
+ * binding after this plugin applies, and a single `ctx.get` loses that race
+ * almost every launch.
+ *
+ * Requests are fenced: the external route demands the token the endpoint file
+ * carries (loopback plus token, no login), while the renderer routes rely on
+ * the Host's own `connection` admission, so a cross-site page cannot post
+ * banners or drain the queue.
  */
-function mountInterface(ctx, config) {
+function mountInterface(ctx, config, state) {
   if (!config.api) return
-  const server = (() => {
-    try {
-      return ctx.get?.("webServer")
-    } catch {
-      return undefined
-    }
-  })()
-  if (server === undefined || typeof server.register !== "function") {
-    void noteToLog(config.logPath, "interface: the Host has no webServer service; the interface is unavailable")
-    return
-  }
 
-  const queue = []
-  const disposers = []
-
-  const post = async (request, response) => {
-    if (request.method === "OPTIONS") {
-      answer(response, 204, {})
+  const mount = (hostCtx) => {
+    const server = (() => {
+      try {
+        const injected = hostCtx.webServer
+        if (injected !== undefined) return injected
+      } catch {
+        /* a context without the service in `inject` throws on property access */
+      }
+      return hostCtx.get?.("webServer")
+    })()
+    if (server === undefined || typeof server.register !== "function") {
+      void noteToLog(config.logPath, "interface: the Host has no webServer service; the interface is unavailable")
       return
     }
-    if (request.method !== "POST") {
-      answer(response, 405, { ok: false, error: "use POST" })
-      return
+
+    const token = randomBytes(16).toString("hex")
+    const queue = []
+
+    const urlOf = (request) => {
+      try {
+        return new URL(String(request?.url ?? "/"), "http://127.0.0.1")
+      } catch {
+        return undefined
+      }
     }
-    let payload
+    const tokenOf = (request) => {
+      const fromQuery = urlOf(request)?.searchParams.get("token")
+      if (typeof fromQuery === "string" && fromQuery !== "") return fromQuery
+      const header = request?.headers?.["x-dsh-notify-token"]
+      return typeof header === "string" ? header : undefined
+    }
+    const connectionOf = () => {
+      try {
+        return hostCtx.get?.("connection")
+      } catch {
+        return undefined
+      }
+    }
+
+    /**
+     * Answer a caller that may not use this interface; false when it may.
+     * `external` routes demand the endpoint token; renderer routes accept the
+     * Host's own admission (its login cookie) or the token.
+     */
+    const rejected = (request, response, external) => {
+      if (tokenOf(request) === token) return false
+      if (external) {
+        answer(response, 401, { ok: false, error: "a token is required; post to the URL in ~/.dsh/desktop-notify.endpoint" })
+        return true
+      }
+      const connection = connectionOf()
+      let status
+      try {
+        status = typeof connection?.requestRejection === "function" ? connection.requestRejection(request) : undefined
+      } catch {
+        status = undefined
+      }
+      if (status === undefined) return false
+      answer(response, status, { ok: false, error: "unauthorized" })
+      return true
+    }
+
+    const post = async (request, response) => {
+      if (rejected(request, response, true)) return
+      if (request.method === "OPTIONS") {
+        answer(response, 204, {})
+        return
+      }
+      if (request.method !== "POST") {
+        answer(response, 405, { ok: false, error: "use POST" })
+        return
+      }
+      let payload
+      try {
+        payload = await readBody(request, Math.max(1024, config.apiBodyLimit))
+      } catch (error) {
+        answer(response, 400, { ok: false, error: String(error?.message ?? error) })
+        return
+      }
+      const title = typeof payload?.title === "string" ? payload.title.trim() : ""
+      const body = typeof payload?.body === "string" ? payload.body.trim() : ""
+      if (title === "" && body === "") {
+        answer(response, 400, { ok: false, error: "title or body is required" })
+        return
+      }
+      queue.push({
+        at: new Date().toISOString(),
+        title: title === "" ? "DeepSeek Harness" : title,
+        body: body.slice(0, 400),
+        ...typeof payload?.sessionId === "string" && payload.sessionId !== "" ? { sessionId: payload.sessionId } : {},
+      })
+      while (queue.length > Math.max(1, config.apiQueueLimit)) queue.shift()
+      answer(response, 202, { ok: true, queued: queue.length })
+    }
+
+    const pending = (request, response) => {
+      if (rejected(request, response, false)) return
+      if (request.method !== "GET") {
+        answer(response, 405, { ok: false, error: "use GET" })
+        return
+      }
+      const items = queue.splice(0, queue.length)
+      answer(response, 200, items)
+    }
+
+    const turn = (request, response) => {
+      if (rejected(request, response, false)) return
+      if (request.method !== "GET") {
+        answer(response, 405, { ok: false, error: "use GET" })
+        return
+      }
+      const sessionId = urlOf(request)?.searchParams.get("sessionId") ?? ""
+      const entry = state.lastTurnEnds.get(sessionId)
+      answer(response, 200, entry === undefined ? {} : { kind: entry.kind, at: entry.at })
+    }
+
+    let disposers
     try {
-      payload = await readBody(request, Math.max(1024, config.apiBodyLimit))
+      disposers = [
+        server.register({ kind: "exact", path: API_REQUEST_PATH, handler: (request, response) => {
+          void post(request, response).catch(() => answer(response, 500, { ok: false }))
+        } }),
+        server.register({ kind: "exact", path: API_PENDING_PATH, handler: (request, response) => {
+          try {
+            pending(request, response)
+          } catch {
+            answer(response, 500, [])
+          }
+        } }),
+        server.register({ kind: "exact", path: API_TURN_PATH, handler: (request, response) => {
+          try {
+            turn(request, response)
+          } catch {
+            answer(response, 500, {})
+          }
+        } }),
+      ]
     } catch (error) {
-      answer(response, 400, { ok: false, error: String(error?.message ?? error) })
+      void noteToLog(config.logPath, `interface: cannot register routes: ${String(error)}`)
       return
     }
-    const title = typeof payload?.title === "string" ? payload.title.trim() : ""
-    const body = typeof payload?.body === "string" ? payload.body.trim() : ""
-    if (title === "" && body === "") {
-      answer(response, 400, { ok: false, error: "title or body is required" })
-      return
-    }
-    queue.push({
-      at: new Date().toISOString(),
-      title: title === "" ? "DeepSeek Harness" : title,
-      body: body.slice(0, 400),
-      ...typeof payload?.sessionId === "string" && payload.sessionId !== "" ? { sessionId: payload.sessionId } : {},
-    })
-    while (queue.length > Math.max(1, config.apiQueueLimit)) queue.shift()
-    answer(response, 202, { ok: true, queued: queue.length })
-  }
 
-  const pending = (request, response) => {
-    if (request.method === "OPTIONS") {
-      answer(response, 204, {})
-      return
-    }
-    if (request.method !== "GET") {
-      answer(response, 405, { ok: false, error: "use GET" })
-      return
-    }
-    const items = queue.splice(0, queue.length)
-    answer(response, 200, items)
-  }
-
-  try {
-    disposers.push(server.register({ kind: "exact", path: API_REQUEST_PATH, handler: (request, response) => {
-      void post(request, response).catch(() => answer(response, 500, { ok: false }))
-    } }))
-    disposers.push(server.register({ kind: "exact", path: API_PENDING_PATH, handler: (request, response) => {
+    // Hand the caller an address to post to; the port is whatever the Host
+    // took, and the token keeps every other local page out.
+    const endpointPath = expandHome(config.endpointPath)
+    const origin = (() => {
       try {
-        pending(request, response)
+        return typeof server.getOrigin === "function" ? server.getOrigin() : undefined
       } catch {
-        answer(response, 500, [])
+        return undefined
       }
-    } }))
-  } catch (error) {
-    void noteToLog(config.logPath, `interface: cannot register routes: ${String(error)}`)
+    })() ?? (typeof server.port === "number" ? `${typeof server.protocol === "string" ? server.protocol : "http:"}//127.0.0.1:${server.port}` : undefined)
+    if (endpointPath !== "" && origin !== undefined) {
+      void mkdir(dirname(endpointPath), { recursive: true })
+        .then(() => writeFile(endpointPath, `${origin}${API_REQUEST_PATH}?token=${token}\n`, "utf8"))
+        .then(() => noteToLog(config.logPath, `interface: ${origin}${API_REQUEST_PATH}`))
+        .catch((error) => noteToLog(config.logPath, `interface: cannot write the endpoint file: ${String(error)}`))
+    } else {
+      void noteToLog(config.logPath, "interface: routes registered but the address is unknown")
+    }
+
+    hostCtx.effect(() => () => {
+      for (const dispose of disposers) {
+        try {
+          dispose()
+        } catch {
+          /* the route table is being torn down anyway */
+        }
+      }
+      if (endpointPath !== "") void rm(endpointPath, { force: true }).catch(() => {})
+    }, "desktop-notify: local interface")
+  }
+
+  // A Host without `inject` (older composition) still gets one best-effort try.
+  if (typeof ctx.inject !== "function") {
+    mount(ctx)
     return
   }
-
-  // Hand the caller an address to post to; the port is whatever the Host took.
-  const endpointPath = expandHome(config.endpointPath)
-  const origin = (() => {
-    try {
-      return typeof server.getOrigin === "function" ? server.getOrigin() : undefined
-    } catch {
-      return undefined
-    }
-  })() ?? (typeof server.port === "number" ? `http://127.0.0.1:${server.port}` : undefined)
-  if (endpointPath !== "" && origin !== undefined) {
-    void mkdir(dirname(endpointPath), { recursive: true })
-      .then(() => writeFile(endpointPath, `${origin}${API_REQUEST_PATH}\n`, "utf8"))
-      .then(() => noteToLog(config.logPath, `interface: ${origin}${API_REQUEST_PATH}`))
-      .catch((error) => noteToLog(config.logPath, `interface: cannot write the endpoint file: ${String(error)}`))
-  } else {
-    void noteToLog(config.logPath, `interface: routes registered but the address is unknown (origin=${String(origin)})`)
-  }
-
-  ctx.effect(() => () => {
-    for (const dispose of disposers) {
-      try {
-        dispose()
-      } catch {
-        /* the route table is being torn down anyway */
-      }
-    }
-    if (endpointPath !== "") void rm(endpointPath, { force: true }).catch(() => {})
-  }, "desktop-notify: local interface")
+  ctx.inject(["webServer"], (hostCtx) => {
+    mount(hostCtx)
+  })
 }
 
 /** Append one best-effort line to the log from outside the session machinery. */
@@ -322,8 +406,9 @@ function runDetached(command, args) {
  */
 export function apply(ctx, rawConfig) {
   const config = resolveConfig(rawConfig)
-  mountInterface(ctx, config)
-  if (!config.enabled) return
+  /** The newest turn-end kind per session, read by the renderer over the local interface. */
+  const state = { lastTurnEnds: new Map() }
+  mountInterface(ctx, config, state)
 
   const logPath = expandHome(config.logPath)
   const pendingText = new Map()
@@ -336,6 +421,27 @@ export function apply(ctx, rawConfig) {
       await appendFile(logPath, `${new Date().toISOString()} ${line}\n`, "utf8")
     } catch {
       /* a log that cannot be written must not break notification delivery */
+    }
+  }
+
+  /**
+   * Keep the real reason of the last turn. The renderer's session status only
+   * carries `running` / `completionUnread`, so without this every ending —
+   * blocked, max-tokens, aborted — would be announced as "completed".
+   */
+  function rememberTurnEnd(session, event) {
+    if (event?.type !== "turn/end") return
+    const sessionId = session?.id
+    if (typeof sessionId !== "string" || sessionId === "") return
+    state.lastTurnEnds.delete(sessionId)
+    state.lastTurnEnds.set(sessionId, {
+      kind: event?.data?.reason?.kind ?? "completed",
+      at: new Date().toISOString(),
+    })
+    while (state.lastTurnEnds.size > Math.max(1, config.maxTrackedSessions)) {
+      const oldest = state.lastTurnEnds.keys().next()
+      if (oldest.done === true) break
+      state.lastTurnEnds.delete(oldest.value)
     }
   }
 
@@ -406,8 +512,18 @@ export function apply(ctx, rawConfig) {
     }
   }
 
-  /** One dispatch per committed event; work stays off the append path. */
+  /**
+   * One dispatch per committed event; work stays off the append path. The
+   * turn-end record is kept even with the osascript fallback switched off,
+   * because the renderer asks for it to word its own banner.
+   */
   ctx.on("session/event", (session, event) => {
+    try {
+      rememberTurnEnd(session, event)
+    } catch (error) {
+      void writeLog(`error session=${session?.id ?? "-"} ${String(error)}`)
+    }
+    if (!config.enabled) return
     try {
       handleEvent(session, event)
     } catch (error) {
@@ -415,11 +531,14 @@ export function apply(ctx, rawConfig) {
     }
   })
 
-  /** A disposed session must not keep its remembered text alive. */
+  /** A disposed session must not keep its remembered text or turn kind alive. */
   ctx.on("session/disposed", (session) => {
     const sessionId = session?.id
-    if (typeof sessionId === "string") pendingText.delete(sessionId)
+    if (typeof sessionId !== "string") return
+    pendingText.delete(sessionId)
+    state.lastTurnEnds.delete(sessionId)
   })
 
+  if (!config.enabled) return
   void writeLog(`plugin started pid=${process.pid} platform=${process.platform} onlyWhenUnfocused=${config.onlyWhenUnfocused}`)
 }

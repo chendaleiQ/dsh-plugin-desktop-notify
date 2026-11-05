@@ -356,9 +356,27 @@ console.log("client-half harness")
   check("notifications:false keeps the badge", muted.latestBadge() === 1, String(muted.latestBadge()))
 
   const noBadge = createWorld({ preferences: { badge: false } })
-  noBadge.setState(new Map([["s5", { completionUnread: true }]]), user("s5", "无徽标"))
+  noBadge.setState(new Map([["s5", { running: true }]]), user("s5", "无徽标"))
+  noBadge.setState(new Map([["s5", { running: false, completionUnread: true }]]))
   check("badge:false still notifies", noBadge.notifications.length === 1)
   check("badge:false never writes a number", noBadge.latestBadge() === 0, String(noBadge.latestBadge()))
+}
+
+// 9. Reloading the window must not replay every unread fact as a new banner.
+{
+  const world = createWorld()
+  world.setState(
+    new Map([
+      ["u1", { completionUnread: true }],
+      ["u2", { running: true, pendingInteraction: { kind: "approval", toolName: "Bash" } }],
+    ]),
+    { ...user("u1", "旧的未读"), ...user("u2", "等审批") },
+  )
+  check("a reload posts no banner for facts that already existed", world.notifications.length === 0, `got ${world.notifications.length}`)
+  check("a reload still restores the badge", world.latestBadge() === 2, String(world.latestBadge()))
+
+  world.setState(new Map([["u1", { completionUnread: true }], ["u2", { running: false, completionUnread: true }]]))
+  check("the next real edge still posts a banner", world.notifications.length === 1, `got ${world.notifications.length}`)
 }
 
 if (failures.length > 0) {
