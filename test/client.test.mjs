@@ -379,6 +379,13 @@ console.log("client-half harness")
   check("the next real edge still posts a banner", world.notifications.length === 1, `got ${world.notifications.length}`)
 }
 
+// 10. The renderer half reports the version the package actually ships.
+{
+  const world = createWorld()
+  const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"))
+  check("client VERSION matches package.json", world.diagnostics()?.version === pkg.version, `${world.diagnostics()?.version} vs ${pkg.version}`)
+}
+
 if (failures.length > 0) {
   console.error(`\n${failures.length} check(s) failed: ${failures.join(", ")}`)
   process.exitCode = 1
