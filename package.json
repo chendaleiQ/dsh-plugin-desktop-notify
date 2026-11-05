@@ -58,5 +58,8 @@
   },
   "scripts": {
     "test": "node test/client.test.mjs && node test/host.test.mjs /tmp/dsh-notify-host-test.log"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

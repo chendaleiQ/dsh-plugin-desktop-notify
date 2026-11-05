@@ -42,4 +42,13 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm publish --provenance --access public
+      - name: Is this version already on npm?
+        id: published
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "dsh-plugin-desktop-notify@$version" version >/dev/null 2>&1; then
+            echo "already published: $version" >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.published.outputs.skip != 'true'
+        run: npm publish --provenance --access public
