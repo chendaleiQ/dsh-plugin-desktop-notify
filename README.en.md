@@ -44,7 +44,7 @@ Stored in localStorage under `dsh-plugin-desktop-notify.preferences`:
 | `notifyError` | `true` | Notify when a turn fails |
 | `notifyViewed` | `false` | Also notify for the session you are looking at |
 | `badge` | `true` | Show the badge |
-| `pinAttention` | `true` | pin what needs you to the top of its group (uses the app's own pin) |
+| `orderAttention` | `true` | seat what needs you below your pins (writes the view's order, never the pin state) |
 | `excludeSubagents` | `true` | Ignore subagent sessions |
 | `titleComplete` / `titlePending` / `titleError` | empty | Custom titles; empty keeps the built-in copy |
 | `maxBodyChars` | `140` | Body length limit |

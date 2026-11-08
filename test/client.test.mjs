@@ -39,8 +39,8 @@ function createWorld({ preferences } = {}) {
   let focusCalls = 0
   let loader
   let errorHandler
-  const pinCalls = []
-  const pinnedNow = new Set()
+  const orderWrites = []
+  const orderByKey = new Map()
   let focused = true
   let visible = true
 
@@ -177,19 +177,15 @@ function createWorld({ preferences } = {}) {
     },
     uiWorkspace: {
       openSession: (sessionId) => opened.push(sessionId),
-      pinSession(sessionId) {
-        pinnedNow.add(sessionId)
-        pinCalls.push(["pin", sessionId])
-        return Promise.resolve()
-      },
-      unpinSession(sessionId) {
-        pinnedNow.delete(sessionId)
-        pinCalls.push(["unpin", sessionId])
-        return Promise.resolve()
+      view: {
+        setSessionOrder(key, order) {
+          orderByKey.set(key, [...order])
+          orderWrites.push([key, [...order]])
+        },
       },
       workspaces: {
         list: {
-          getSnapshot: () => ({ items: [], pinnedSessionIds: [...pinnedNow], archivedSessionIds: [] }),
+          getSnapshot: () => ({ items: [], pinnedSessionIds: [], archivedSessionIds: [] }),
         },
       },
     },
@@ -224,10 +220,9 @@ function createWorld({ preferences } = {}) {
     },
     latestBadge: () => badgeWrites.at(-1),
     diagnostics: () => sandbox.window.__DSH_DESKTOP_NOTIFY__,
-    pinCalls: () => pinCalls,
-    pinned: () => [...pinnedNow],
-    pinnedByPlugin: () => sandbox.window.__DSH_DESKTOP_NOTIFY__?.pinState?.().pinnedByPlugin ?? [],
-    pinByUser: (sessionId) => pinnedNow.add(sessionId),
+    orderWrites: () => orderWrites,
+    settle: (ms = 750) => new Promise((resolve) => setTimeout(resolve, ms)),
+    orderFor: (key) => orderByKey.get(key) ?? [],
   }
 }
 
@@ -400,36 +395,44 @@ console.log("client-half harness")
   check("the next real edge still posts a banner", world.notifications.length === 1, `got ${world.notifications.length}`)
 }
 
-// 11. Sessions that need you are pinned to the top of their group.
+// 11. What needs you is seated right below the manual pins.
 {
   const world = createWorld()
   world.setState(new Map([["s1", { running: true }]]), user("s1", "跑着的会话"))
-  check("a running session gets pinned", world.pinnedByPlugin().includes("s1"), JSON.stringify(world.pinCalls()))
-  check("the pin goes through the sidebar's own pin", world.pinned().includes("s1"), JSON.stringify(world.pinned()))
+  await world.settle()
+  check("a running session joins the tier", world.orderFor("").join(",") === "s1", JSON.stringify(world.orderWrites()))
+
+  const writes = world.orderWrites().length
+  world.setState(new Map([["s1", { running: true }]]), user("s1", "跑着的会话"))
+  await world.settle()
+  check("an unchanged status writes nothing", world.orderWrites().length === writes, `${world.orderWrites().length} vs ${writes}`)
 
   world.setState(new Map([["s1", { running: false, completionUnread: true }]]))
-  check("an unread completion keeps the pin", world.pinnedByPlugin().includes("s1"))
+  await world.settle()
+  check("finishing keeps the seat without a rewrite", world.orderFor("").join(",") === "s1" && world.orderWrites().length === writes)
 
   world.setState(new Map([["s1", { running: false, completionUnread: false }]]), viewed("s1", "跑着的会话"))
-  check("looking at it releases the pin", world.pinnedByPlugin().length === 0 && world.pinned().length === 0, JSON.stringify(world.pinCalls()))
+  await world.settle()
+  check("looking at it releases the seat", world.orderFor("").length === 0, JSON.stringify(world.orderWrites()))
 }
 
-// 12. A session the user pinned by hand is never taken away.
+// 12. A newcomer joins the bottom, so running turns never fight for the first slot.
 {
   const world = createWorld()
-  world.pinByUser("mine")
-  world.setState(new Map([["mine", { running: true }]]), user("mine", "手置顶"))
-  world.setState(new Map([["mine", { running: false }]]), user("mine", "手置顶"))
-  check("a manual pin survives", world.pinned().includes("mine"), JSON.stringify(world.pinned()))
-  check("the plugin does not claim it", world.pinnedByPlugin().length === 0, JSON.stringify(world.pinnedByPlugin()))
-  check("and never unpins it", world.pinCalls().every(([action]) => action === "pin") === true, JSON.stringify(world.pinCalls()))
+  const summaries = { ...user("a", "A"), ...user("b", "B") }
+  world.setState(new Map([["a", { running: true }]]), summaries)
+  await world.settle()
+  world.setState(new Map([["a", { running: true }], ["b", { running: true }]]), summaries)
+  await world.settle()
+  check("the session that needed you first keeps the top seat", world.orderFor("").join(",") === "a,b", JSON.stringify(world.orderFor("")))
 }
 
-// 13. The pin is a preference, not a hard rule.
+// 13. The behaviour is a preference.
 {
-  const world = createWorld({ preferences: { pinAttention: false } })
+  const world = createWorld({ preferences: { orderAttention: false } })
   world.setState(new Map([["r", { running: true }]]), user("r", "运行中"))
-  check("pinAttention:false leaves the sidebar alone", world.pinCalls().length === 0, JSON.stringify(world.pinCalls()))
+  await world.settle()
+  check("orderAttention:false never writes an order", world.orderWrites().length === 0, JSON.stringify(world.orderWrites()))
 }
 
 // 10. The renderer half reports the version the package actually ships.
