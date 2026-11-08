@@ -41,6 +41,7 @@ function createWorld({ preferences } = {}) {
   let errorHandler
   const orderWrites = []
   const orderByKey = new Map()
+  let workspaceItems = []
   let focused = true
   let visible = true
 
@@ -185,7 +186,7 @@ function createWorld({ preferences } = {}) {
       },
       workspaces: {
         list: {
-          getSnapshot: () => ({ items: [], pinnedSessionIds: [], archivedSessionIds: [] }),
+          getSnapshot: () => ({ items: workspaceItems, pinnedSessionIds: [], archivedSessionIds: [], phase: "ready", state: "ready" }),
         },
       },
     },
@@ -221,6 +222,9 @@ function createWorld({ preferences } = {}) {
     latestBadge: () => badgeWrites.at(-1),
     diagnostics: () => sandbox.window.__DSH_DESKTOP_NOTIFY__,
     orderWrites: () => orderWrites,
+    setWorkspaces: (items) => {
+      workspaceItems = items
+    },
     settle: (ms = 750) => new Promise((resolve) => setTimeout(resolve, ms)),
     orderFor: (key) => orderByKey.get(key) ?? [],
   }
@@ -395,7 +399,7 @@ console.log("client-half harness")
   check("the next real edge still posts a banner", world.notifications.length === 1, `got ${world.notifications.length}`)
 }
 
-// 11. What needs you is seated right below the manual pins.
+// 11. A running turn takes the seat, and tabbing away does not shuffle it.
 {
   const world = createWorld()
   world.setState(new Map([["s1", { running: true }]]), user("s1", "跑着的会话"))
@@ -403,31 +407,48 @@ console.log("client-half harness")
   check("a running session joins the tier", world.orderFor("").join(",") === "s1", JSON.stringify(world.orderWrites()))
 
   const writes = world.orderWrites().length
-  world.setState(new Map([["s1", { running: true }]]), user("s1", "跑着的会话"))
+  world.setFocus(false, false)
   await world.settle()
-  check("an unchanged status writes nothing", world.orderWrites().length === writes, `${world.orderWrites().length} vs ${writes}`)
+  check("blurring the window does not reshuffle", world.orderWrites().length === writes, `${world.orderWrites().length} vs ${writes}`)
+  world.setFocus(true, true)
+  await world.settle()
+  check("focusing it again does not reshuffle either", world.orderWrites().length === writes, `${world.orderWrites().length} vs ${writes}`)
 
   world.setState(new Map([["s1", { running: false, completionUnread: true }]]))
   await world.settle()
-  check("finishing keeps the seat without a rewrite", world.orderFor("").join(",") === "s1" && world.orderWrites().length === writes)
-
-  world.setState(new Map([["s1", { running: false, completionUnread: false }]]), viewed("s1", "跑着的会话"))
-  await world.settle()
-  check("looking at it releases the seat", world.orderFor("").length === 0, JSON.stringify(world.orderWrites()))
+  check("an unread completion drops to the badge, not the band", world.orderFor("").length === 0, JSON.stringify(world.orderWrites()))
 }
 
-// 12. A newcomer joins the bottom, so running turns never fight for the first slot.
+// 12. A waiting approval keeps its seat, and a newcomer joins the bottom.
 {
   const world = createWorld()
   const summaries = { ...user("a", "A"), ...user("b", "B") }
   world.setState(new Map([["a", { running: true }]]), summaries)
   await world.settle()
-  world.setState(new Map([["a", { running: true }], ["b", { running: true }]]), summaries)
+  const afterFirst = world.orderWrites().length
+  world.setState(new Map([["a", { running: true, pendingInteraction: { kind: "approval", toolName: "Bash" } }], ["b", { running: true }]]), summaries)
   await world.settle()
   check("the session that needed you first keeps the top seat", world.orderFor("").join(",") === "a,b", JSON.stringify(world.orderFor("")))
+  check("joining the band is one write", world.orderWrites().length === afterFirst + 2, `${world.orderWrites().length} vs ${afterFirst + 2}`)
+  const settle = world.orderWrites().length
+  world.setState(new Map([["a", { running: true, pendingInteraction: { kind: "approval", toolName: "Bash" } }], ["b", { running: true }]]), summaries)
+  await world.settle()
+  check("a repeated status writes nothing", world.orderWrites().length === settle, `${world.orderWrites().length} vs ${settle}`)
 }
 
-// 13. The behaviour is a preference.
+// 13. Each group gets only its own members, and an untouched group keeps its own arrangement.
+{
+  const world = createWorld()
+  const summaries = { ...user("in", "分组里的"), ...user("out", "散在外面的") }
+  world.setWorkspaces([{ workspaceId: "w1", sessionIds: ["in"] }])
+  world.setState(new Map([["in", { running: true }], ["out", { running: true }]]), summaries)
+  await world.settle()
+  check("a workspace group is seated on its own key", world.orderFor("w1").join(",") === "in", JSON.stringify(world.orderFor("w1")))
+  check("ungrouped sessions keep their own key", world.orderFor("").join(",") === "out", JSON.stringify(world.orderFor("")))
+  check("the flat list is seated too", world.orderFor("__flat_session_order__").join(",") === "in,out", JSON.stringify(world.orderFor("__flat_session_order__")))
+}
+
+// 14. The behaviour is a preference.
 {
   const world = createWorld({ preferences: { orderAttention: false } })
   world.setState(new Map([["r", { running: true }]]), user("r", "运行中"))
