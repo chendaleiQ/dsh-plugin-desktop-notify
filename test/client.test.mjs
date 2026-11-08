@@ -39,6 +39,8 @@ function createWorld({ preferences } = {}) {
   let focusCalls = 0
   let loader
   let errorHandler
+  const pinCalls = []
+  const pinnedNow = new Set()
   let focused = true
   let visible = true
 
@@ -175,6 +177,21 @@ function createWorld({ preferences } = {}) {
     },
     uiWorkspace: {
       openSession: (sessionId) => opened.push(sessionId),
+      pinSession(sessionId) {
+        pinnedNow.add(sessionId)
+        pinCalls.push(["pin", sessionId])
+        return Promise.resolve()
+      },
+      unpinSession(sessionId) {
+        pinnedNow.delete(sessionId)
+        pinCalls.push(["unpin", sessionId])
+        return Promise.resolve()
+      },
+      workspaces: {
+        list: {
+          getSnapshot: () => ({ items: [], pinnedSessionIds: [...pinnedNow], archivedSessionIds: [] }),
+        },
+      },
     },
   }
 
@@ -207,6 +224,10 @@ function createWorld({ preferences } = {}) {
     },
     latestBadge: () => badgeWrites.at(-1),
     diagnostics: () => sandbox.window.__DSH_DESKTOP_NOTIFY__,
+    pinCalls: () => pinCalls,
+    pinned: () => [...pinnedNow],
+    pinnedByPlugin: () => sandbox.window.__DSH_DESKTOP_NOTIFY__?.pinState?.().pinnedByPlugin ?? [],
+    pinByUser: (sessionId) => pinnedNow.add(sessionId),
   }
 }
 
@@ -377,6 +398,38 @@ console.log("client-half harness")
 
   world.setState(new Map([["u1", { completionUnread: true }], ["u2", { running: false, completionUnread: true }]]))
   check("the next real edge still posts a banner", world.notifications.length === 1, `got ${world.notifications.length}`)
+}
+
+// 11. Sessions that need you are pinned to the top of their group.
+{
+  const world = createWorld()
+  world.setState(new Map([["s1", { running: true }]]), user("s1", "跑着的会话"))
+  check("a running session gets pinned", world.pinnedByPlugin().includes("s1"), JSON.stringify(world.pinCalls()))
+  check("the pin goes through the sidebar's own pin", world.pinned().includes("s1"), JSON.stringify(world.pinned()))
+
+  world.setState(new Map([["s1", { running: false, completionUnread: true }]]))
+  check("an unread completion keeps the pin", world.pinnedByPlugin().includes("s1"))
+
+  world.setState(new Map([["s1", { running: false, completionUnread: false }]]), viewed("s1", "跑着的会话"))
+  check("looking at it releases the pin", world.pinnedByPlugin().length === 0 && world.pinned().length === 0, JSON.stringify(world.pinCalls()))
+}
+
+// 12. A session the user pinned by hand is never taken away.
+{
+  const world = createWorld()
+  world.pinByUser("mine")
+  world.setState(new Map([["mine", { running: true }]]), user("mine", "手置顶"))
+  world.setState(new Map([["mine", { running: false }]]), user("mine", "手置顶"))
+  check("a manual pin survives", world.pinned().includes("mine"), JSON.stringify(world.pinned()))
+  check("the plugin does not claim it", world.pinnedByPlugin().length === 0, JSON.stringify(world.pinnedByPlugin()))
+  check("and never unpins it", world.pinCalls().every(([action]) => action === "pin") === true, JSON.stringify(world.pinCalls()))
+}
+
+// 13. The pin is a preference, not a hard rule.
+{
+  const world = createWorld({ preferences: { pinAttention: false } })
+  world.setState(new Map([["r", { running: true }]]), user("r", "运行中"))
+  check("pinAttention:false leaves the sidebar alone", world.pinCalls().length === 0, JSON.stringify(world.pinCalls()))
 }
 
 // 10. The renderer half reports the version the package actually ships.

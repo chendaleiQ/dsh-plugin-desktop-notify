@@ -16,6 +16,7 @@
 
 import { execFile, spawn } from "node:child_process"
 import { randomBytes } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { appendFile, mkdir, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, dirname, join } from "node:path"
@@ -47,6 +48,8 @@ const DEFAULTS = {
   api: true,
   /** Where the endpoint URL is written for those tools. */
   endpointPath: "~/.dsh/desktop-notify.endpoint",
+  /** Where the sessions this plugin pinned are remembered across window lives. */
+  pinsPath: "~/.dsh/desktop-notify-pins.json",
   /** Longest accepted request body. */
   apiBodyLimit: 8192,
   /** How many unread requests the interface keeps. */
@@ -65,6 +68,7 @@ const TURN_END_BODIES = {
 const API_REQUEST_PATH = "/desktop-notify/request"
 const API_PENDING_PATH = "/desktop-notify/pending"
 const API_TURN_PATH = "/desktop-notify/turn"
+const API_PINS_PATH = "/desktop-notify/pins"
 
 /** Read one JSON request body, bounded by `limit` bytes. */
 function readBody(request, limit) {
@@ -237,6 +241,37 @@ function mountInterface(ctx, config, state) {
       answer(response, 200, entry === undefined ? {} : { kind: entry.kind, at: entry.at })
     }
 
+    /**
+     * Remember which sessions this plugin pinned. The renderer's origin (and so
+     * its localStorage) changes with every launch, while the sidebar pins live
+     * on the Host; this file is what lets a restart release the pins it owns
+     * instead of mistaking them for the user's own.
+     */
+    const pins = (request, response) => {
+      if (rejected(request, response, false)) return
+      if (request.method === "GET") {
+        answer(response, 200, { ids: [...state.pinnedByPlugin] })
+        return
+      }
+      if (request.method !== "POST") {
+        answer(response, 405, { ok: false, error: "use GET or POST" })
+        return
+      }
+      void readBody(request, Math.max(1024, config.apiBodyLimit))
+        .then((payload) => {
+          const ids = Array.isArray(payload?.ids) ? payload.ids.filter((id) => typeof id === "string" && id !== "") : []
+          state.pinnedByPlugin = new Set(ids.slice(0, Math.max(1, config.maxTrackedSessions)))
+          const path = expandHome(config.pinsPath)
+          if (path !== "") {
+            void mkdir(dirname(path), { recursive: true })
+              .then(() => writeFile(path, `${JSON.stringify({ ids: [...state.pinnedByPlugin] })}\n`, "utf8"))
+              .catch(() => {})
+          }
+          answer(response, 200, { ok: true, tracked: state.pinnedByPlugin.size })
+        })
+        .catch((error) => answer(response, 400, { ok: false, error: String(error?.message ?? error) }))
+    }
+
     let disposers
     try {
       disposers = [
@@ -255,6 +290,13 @@ function mountInterface(ctx, config, state) {
             turn(request, response)
           } catch {
             answer(response, 500, {})
+          }
+        } }),
+        server.register({ kind: "exact", path: API_PINS_PATH, handler: (request, response) => {
+          try {
+            pins(request, response)
+          } catch {
+            answer(response, 500, { ok: false })
           }
         } }),
       ]
@@ -407,7 +449,19 @@ function runDetached(command, args) {
 export function apply(ctx, rawConfig) {
   const config = resolveConfig(rawConfig)
   /** The newest turn-end kind per session, read by the renderer over the local interface. */
-  const state = { lastTurnEnds: new Map() }
+  const state = { lastTurnEnds: new Map(), pinnedByPlugin: new Set() }
+  // Seeded synchronously: the renderer asks for it as soon as it applies.
+  try {
+    const pinsPath = expandHome(config.pinsPath)
+    if (pinsPath !== "") {
+      const remembered = JSON.parse(readFileSync(pinsPath, "utf8"))
+      if (Array.isArray(remembered?.ids)) {
+        for (const id of remembered.ids) if (typeof id === "string" && id !== "") state.pinnedByPlugin.add(id)
+      }
+    }
+  } catch {
+    /* no remembered pins yet */
+  }
   mountInterface(ctx, config, state)
 
   const logPath = expandHome(config.logPath)

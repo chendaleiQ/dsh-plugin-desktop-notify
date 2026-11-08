@@ -28,11 +28,14 @@ function session(id, header) {
 const main = session("session-main", { version: 4, id: "session-main", createdAt: 1, cwd: "/Users/u/Desktop/mine" })
 const child = session("session-child", { version: 4, id: "session-child", createdAt: 2, cwd: "/Users/u/Desktop/mine", parentSession: "session-main", origin: "subagent" })
 
+const pinsFile = `/tmp/dsh-notify-pins-${process.pid}.json`
+
 apply(ctx, {
   onlyWhenUnfocused: false,
   sound: false,
   dryRun: true,
   logPath: log,
+  pinsPath: pinsFile,
 })
 
 emit("session/event", main, {
@@ -79,11 +82,12 @@ const apiCtx = {
   },
 }
 
-apply(apiCtx, { enabled: false, api: true, endpointPath: endpointFile, logPath: "/tmp/dsh-notify-api.log", dryRun: true })
+apply(apiCtx, { enabled: false, api: true, endpointPath: endpointFile, pinsPath: pinsFile, logPath: "/tmp/dsh-notify-api.log", dryRun: true })
 await sleep(50)
 assert.equal(routes.has("/desktop-notify/request"), true, "the POST route is registered")
 assert.equal(routes.has("/desktop-notify/pending"), true, "the drain route is registered")
 assert.equal(routes.has("/desktop-notify/turn"), true, "the turn-kind route is registered")
+assert.equal(routes.has("/desktop-notify/pins"), true, "the pins route is registered")
 
 function call(path, method, payload, token) {
   const [routePath, query] = path.split("?")
@@ -177,7 +181,7 @@ assert.equal(JSON.parse(turn.body).kind, "aborted", `the renderer can ask how th
       })
     },
   }
-  apply(deferredCtx, { enabled: false, api: true, endpointPath: lateEndpoint, logPath: "/tmp/dsh-notify-late.log", dryRun: true })
+  apply(deferredCtx, { enabled: false, api: true, endpointPath: lateEndpoint, pinsPath: `/tmp/dsh-notify-late-pins-${process.pid}.json`, logPath: "/tmp/dsh-notify-late.log", dryRun: true })
   await sleep(20)
   assert.equal(existsSync(lateEndpoint), false, "no endpoint file before the web server exists")
   activate()
@@ -185,5 +189,15 @@ assert.equal(JSON.parse(turn.body).kind, "aborted", `the renderer can ask how th
   assert.equal(lateRoutes.has("/desktop-notify/request"), true, "the routes mount once the web server arrives")
   assert.ok(readFileSync(lateEndpoint, "utf8").includes("/desktop-notify/request?token="), "the endpoint appears once the web server arrives")
 }
+
+const emptyPins = call("/desktop-notify/pins", "GET")
+assert.deepEqual(JSON.parse(emptyPins.body), { ids: [] }, "no pins are remembered at first")
+
+const saved = call("/desktop-notify/pins", "POST", { ids: ["s-keep", 42, ""] })
+await sleep(80)
+assert.equal(saved.status, 200, "the pin set is accepted")
+const readBack = call("/desktop-notify/pins", "GET")
+assert.deepEqual(JSON.parse(readBack.body), { ids: ["s-keep"] }, "only string ids survive the round trip")
+assert.deepEqual(JSON.parse(readFileSync(pinsFile, "utf8")), { ids: ["s-keep"] }, "and are written to disk")
 
 console.log("host interface: ok")

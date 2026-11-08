@@ -16,6 +16,7 @@
 - **等待你操作**——工具审批、提问、执行计划确认
 - **任务失败**——这一轮出错时提示
 - **说清楚怎么结束的**——正常完成、被拦截、输出到上限、被中止，各自一句话，不把中断说成「已完成」
+- **需要你的排在前面**——运行中、待你审批/回答、出错、未读完成的会话自动置顶到所属分组第一条，处理完自动放开
 - **小红点**——应用图标上显示「需要你的会话数」，你看过之后才清零
 - **点击通知**——切到对应会话，而不是只把应用叫到前面
 
@@ -45,6 +46,7 @@ dsh-plugin-desktop-notify
 | `notifyViewed` | `false` | 正在看的会话也通知（默认跳过） |
 | `badge` | `true` | 显示小红点 |
 | `excludeSubagents` | `true` | 忽略子智能体会话 |
+| `pinAttention` | `true` | 把需要你处理的会话自动置顶到所属分组第一条（用 DSH 自带置顶，处理完自动取消） |
 | `titleComplete` / `titlePending` / `titleError` | 空 | 自定义标题，空 = 用内置文案 |
 | `maxBodyChars` | `140` | 正文长度上限 |
 
@@ -60,6 +62,7 @@ dsh-plugin-desktop-notify
 __DSH_DESKTOP_NOTIFY__.capabilities()   // 平台、通知权限、小红点、服务可达性
 __DSH_DESKTOP_NOTIFY__.state()          // 小红点、待处理会话、最近一次通知/点击
 __DSH_DESKTOP_NOTIFY__.report()         // 上面全部 + 窗口焦点，便于排查
+__DSH_DESKTOP_NOTIFY__.pinState()       // 插件置顶了哪些、你自己又置顶了哪些
 ```
 
 
@@ -72,6 +75,7 @@ __DSH_DESKTOP_NOTIFY__.report()         // 上面全部 + 窗口焦点，便于�
 | `POST` | `/desktop-notify/request` | 发一条通知，body：`{"title": "...", "body": "...", "sessionId": "可选"}` |
 | `GET` | `/desktop-notify/pending` | 渲染层取走待显示的通知（脚本不用调） |
 | `GET` | `/desktop-notify/turn?sessionId=...` | 渲染层确认这一轮是怎么结束的（脚本不用调） |
+| `GET`/`POST` | `/desktop-notify/pins` | 渲染层读写「插件自己置顶了哪些会话」（脚本不用调） |
 
 地址写在 `~/.dsh/desktop-notify.endpoint`，所以调用方不用猜端口：
 
@@ -107,6 +111,9 @@ urllib.request.urlopen(request, timeout=3).read()
 ## 已知限制
 
 - 重启或刷新窗口时，已经存在的「未读 / 待审批」只恢复小红点，不再补弹横幅
+- 自动置顶用的是 DSH 自己的置顶，所以会话行上会出现置顶标记，右键里也有「取消置顶」。
+  插件只取消**自己**置顶的会话，你手动置顶的一律不动；想一次清干净可在控制台跑
+  `__DSH_DESKTOP_NOTIFY__.clearPins()`
 
 - **Windows**：点通知会切到对应会话，但窗口不一定到前台——`AppUserModelID` 和主进程 focus 通道属于桌面端，渲染层插件做不到
 - **通知归属**：系统通知中心里显示为 DeepSeek Harness（用的是渲染层原生通知）
